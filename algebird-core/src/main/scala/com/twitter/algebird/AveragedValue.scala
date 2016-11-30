@@ -17,7 +17,8 @@ limitations under the License.
 package com.twitter.algebird
 
 object AveragedValue {
-  implicit val group: Group[AveragedValue] = AveragedGroup
+  // TODO: Change to Group[AveragedValue] in 0.13.0
+  implicit val group = AveragedGroup
 
   def aggregator: Aggregator[Double, AveragedValue, Double] = Averager
 
