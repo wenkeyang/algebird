@@ -17,17 +17,22 @@ limitations under the License.
 package com.twitter.algebird
 
 object AveragedValue {
-  implicit val group = AveragedGroup
+  implicit val group: Group[AveragedValue] = AveragedGroup
+
   def aggregator: Aggregator[Double, AveragedValue, Double] = Averager
+
   def numericAggregator[N](implicit num: Numeric[N]): MonoidAggregator[N, AveragedValue, Double] =
     Aggregator.prepareMonoid { n: N => AveragedValue(num.toDouble(n)) }
       .andThenPresent(_.value)
 
-  def apply[V <% Double](v: V) = new AveragedValue(1L, v)
-  def apply[V <% Double](c: Long, v: V) = new AveragedValue(c, v)
+  def apply[V <% Double](v: V): AveragedValue = apply(1L, v)
+  def apply[V <% Double](c: Long, v: V): AveragedValue = new AveragedValue(c, v)
 }
 
-case class AveragedValue(count: Long, value: Double)
+case class AveragedValue(count: Long, value: Double) {
+  def unary_- : AveragedValue = copy(count = -count)
+  def +(r: AveragedValue): AveragedValue = AveragedGroup.plus(this, r)
+}
 
 object AveragedGroup extends Group[AveragedValue] {
   // When combining averages, if the counts sizes are too close we should use a different
@@ -44,7 +49,16 @@ object AveragedGroup extends Group[AveragedValue] {
 
   override def isNonZero(av: AveragedValue) = (av.count != 0L)
 
-  override def negate(av: AveragedValue) = AveragedValue(-av.count, av.value)
+  override def negate(av: AveragedValue) = -av
+
+  override def sumOption(iter: TraversableOnce[AveragedValue]): Option[AveragedValue] =
+    if (iter.isEmpty) None
+    else {
+      val (c, v) = iter.foldLeft((0L, 0.0)) {
+        case ((count, sum), AveragedValue(c, v)) => (count + c, sum + (c * v))
+      }
+      Some(AveragedValue(c, v / c))
+    }
 
   def plus(cntAve1: AveragedValue, cntAve2: AveragedValue): AveragedValue = {
     val (big, small) = if (cntAve1.count >= cntAve2.count)
